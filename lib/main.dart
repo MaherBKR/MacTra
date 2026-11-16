@@ -6,7 +6,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:file_picker/file_picker.dart';
+import 'package:flutter/services.dart';
 
 void main() {
   runApp(const MacroPantryApp());
