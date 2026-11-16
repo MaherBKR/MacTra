@@ -1095,16 +1095,41 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     );
   }
 
-  // ==========================================
+ // ==========================================
   // TAB 4: GRAPHS (WEIGHT & CALORIE HISTORY)
   // ==========================================
 
   Widget _buildAnalyticsTab() {
     final sortedWeightDates = weightLogs.keys.toList()..sort();
-    final weightSpots = <FlSpot>[];
+    final dailyWeightSpots = <FlSpot>[];
+    final rollingAvgSpots = <FlSpot>[];
+
     for (int i = 0; i < sortedWeightDates.length; i++) {
-      weightSpots.add(FlSpot(i.toDouble(), weightLogs[sortedWeightDates[i]]!));
+      final currentDateStr = sortedWeightDates[i];
+      final currentWeight = weightLogs[currentDateStr]!;
+      dailyWeightSpots.add(FlSpot(i.toDouble(), currentWeight));
+
+      // Calculate true 7-day calendar window average (current day + previous 6 days)
+      final currentDate = DateTime.parse(currentDateStr);
+      double sum = 0;
+      int count = 0;
+
+      for (int j = i; j >= 0; j--) {
+        final pastDate = DateTime.parse(sortedWeightDates[j]);
+        if (currentDate.difference(pastDate).inDays <= 6) {
+          sum += weightLogs[sortedWeightDates[j]]!;
+          count++;
+        } else {
+          break;
+        }
+      }
+      final rollingAvg = count > 0 ? (sum / count) : currentWeight;
+      rollingAvgSpots.add(FlSpot(i.toDouble(), double.parse(rollingAvg.toStringAsFixed(2))));
     }
+
+    // Latest summary stats for the header
+    final latestDaily = dailyWeightSpots.isNotEmpty ? dailyWeightSpots.last.y : null;
+    final latestRolling = rollingAvgSpots.isNotEmpty ? rollingAvgSpots.last.y : null;
 
     // Last 7 days calories bar chart
     final last7Days = List.generate(7, (i) {
@@ -1115,30 +1140,110 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        const Text('Morning Weight Trend (kg)',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 12),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text('Morning Weight Trend (kg)',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            if (latestDaily != null && latestRolling != null)
+              Text(
+                '7d Avg: ${latestRolling.toStringAsFixed(1)} kg',
+                style: const TextStyle(
+                  color: Colors.orangeAccent,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 15,
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
+
+        // Legend for Daily vs 7-Day Rolling Average
+        Row(
+          children: [
+            Container(width: 12, height: 12, decoration: const BoxDecoration(color: Colors.tealAccent, shape: BoxShape.circle)),
+            const SizedBox(width: 6),
+            const Text('Daily Morning Weight', style: TextStyle(fontSize: 12, color: Colors.white70)),
+            const SizedBox(width: 16),
+            Container(width: 16, height: 4, color: Colors.orangeAccent),
+            const SizedBox(width: 6),
+            const Text('7-Day Rolling Average', style: TextStyle(fontSize: 12, color: Colors.white70)),
+          ],
+        ),
+        const SizedBox(height: 10),
+
         SizedBox(
-          height: 220,
+          height: 250,
           child: Card(
             child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: weightSpots.isEmpty
+              padding: const EdgeInsets.fromLTRB(12, 20, 20, 12),
+              child: dailyWeightSpots.isEmpty
                   ? const Center(child: Text('Log morning weights on the Daily tab to see trend.'))
                   : LineChart(
                       LineChartData(
-                        gridData: const FlGridData(show: true),
-                        titlesData: const FlTitlesData(
-                          topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                          rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                        gridData: const FlGridData(show: true, drawVerticalLine: false),
+                        titlesData: FlTitlesData(
+                          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                          bottomTitles: AxisTitles(
+                            sideTitles: SideTitles(
+                              showTitles: true,
+                              reservedSize: 28,
+                              interval: (sortedWeightDates.length / 4).clamp(1, 30).toDouble(),
+                              getTitlesWidget: (value, meta) {
+                                final idx = value.toInt();
+                                if (idx < 0 || idx >= sortedWeightDates.length) {
+                                  return const SizedBox.shrink();
+                                }
+                                final shortDate = sortedWeightDates[idx].substring(5); // MM-dd
+                                return Padding(
+                                  padding: const EdgeInsets.only(top: 6),
+                                  child: Text(shortDate, style: const TextStyle(fontSize: 10, color: Colors.white60)),
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+                        lineTouchData: LineTouchData(
+                          touchTooltipData: LineTouchTooltipData(
+                            getTooltipItems: (touchedSpots) {
+                              return touchedSpots.map((spot) {
+                                final idx = spot.x.toInt();
+                                final dateLabel = (idx >= 0 && idx < sortedWeightDates.length)
+                                    ? sortedWeightDates[idx].substring(5)
+                                    : '';
+                                final isRolling = spot.barIndex == 1;
+                                return LineTooltipItem(
+                                  isRolling
+                                      ? '7d Avg: ${spot.y.toStringAsFixed(2)} kg'
+                                      : '$dateLabel\nDaily: ${spot.y.toStringAsFixed(1)} kg',
+                                  TextStyle(
+                                    color: isRolling ? Colors.orangeAccent : Colors.tealAccent,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12,
+                                  ),
+                                );
+                              }).toList();
+                            },
+                          ),
                         ),
                         lineBarsData: [
+                          // Bar 0: Daily Raw Weight (Teal, slightly subtle with visible dots)
                           LineChartBarData(
-                            spots: weightSpots,
-                            isCurved: true,
-                            color: Colors.tealAccent,
-                            barWidth: 3,
+                            spots: dailyWeightSpots,
+                            isCurved: false,
+                            color: Colors.tealAccent.withOpacity(0.55),
+                            barWidth: 2,
                             dotData: const FlDotData(show: true),
+                          ),
+                          // Bar 1: 7-Day Rolling Average (Orange, smooth bold trend line)
+                          LineChartBarData(
+                            spots: rollingAvgSpots,
+                            isCurved: true,
+                            curveSmoothness: 0.25,
+                            color: Colors.orangeAccent,
+                            barWidth: 3.5,
+                            dotData: const FlDotData(show: false),
                           ),
                         ],
                       ),
@@ -1154,9 +1259,30 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           height: 220,
           child: Card(
             child: Padding(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.fromLTRB(12, 20, 20, 12),
               child: BarChart(
                 BarChartData(
+                  gridData: const FlGridData(show: true, drawVerticalLine: false),
+                  titlesData: FlTitlesData(
+                    topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    bottomTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        getTitlesWidget: (value, meta) {
+                          final idx = value.toInt();
+                          if (idx < 0 || idx >= last7Days.length) return const SizedBox.shrink();
+                          return Padding(
+                            padding: const EdgeInsets.only(top: 6),
+                            child: Text(
+                              last7Days[idx].substring(5),
+                              style: const TextStyle(fontSize: 10, color: Colors.white60),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
                   barGroups: List.generate(7, (i) {
                     final dateKey = last7Days[i];
                     final kcal = foodLogs
