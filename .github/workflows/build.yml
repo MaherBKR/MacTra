@@ -34,6 +34,15 @@ jobs:
             cp /tmp/pubspec.yaml.bak pubspec.yaml
           fi
 
+      - name: Force compileSdk 36
+        run: |
+          if [ -f "android/app/build.gradle.kts" ]; then
+            sed -i 's/compileSdk = .*/compileSdk = 36/g' android/app/build.gradle.kts
+          elif [ -f "android/app/build.gradle" ]; then
+            sed -i 's/compileSdk .*/compileSdk 36/g' android/app/build.gradle
+            sed -i 's/compileSdkVersion .*/compileSdkVersion 36/g' android/app/build.gradle
+          fi
+
       - name: Install dependencies
         run: flutter pub get
 
