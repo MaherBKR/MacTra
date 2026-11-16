@@ -277,7 +277,15 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   }
 
   // Backup & Restore Functions
-Future<void> _importBackupFile() async {
+  Future<void> _exportBackupFile() async {
+    final jsonString = const JsonEncoder.withIndent('  ').convert(_exportStateToMap());
+    final dir = await getTemporaryDirectory();
+    final file = File('${dir.path}/macro_pantry_backup_${_selectedDate}.json');
+    await file.writeAsString(jsonString);
+    await Share.shareXFiles([XFile(file.path)], text: 'Macro & Pantry Tracker Backup');
+  }
+
+  Future<void> _importBackupFile() async {
     final ctrl = TextEditingController();
     final clip = await Clipboard.getData(Clipboard.kTextPlain);
     if (clip?.text != null && clip!.text!.trim().startsWith('{')) {
