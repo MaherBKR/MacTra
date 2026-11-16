@@ -277,28 +277,50 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   }
 
   // Backup & Restore Functions
-  Future<void> _exportBackupFile() async {
-    final jsonString = const JsonEncoder.withIndent('  ').convert(_exportStateToMap());
-    final dir = await getTemporaryDirectory();
-    final file = File('${dir.path}/macro_pantry_backup_${_selectedDate}.json');
-    await file.writeAsString(jsonString);
-    await Share.shareXFiles([XFile(file.path)], text: 'Macro & Pantry Tracker Backup');
-  }
-
-  Future<void> _importBackupFile() async {
-    final result = await FilePicker.platform.pickFiles(type: FileType.any);
-    if (result != null && result.files.single.path != null) {
-      final file = File(result.files.single.path!);
-      final content = await file.readAsString();
-      final decoded = jsonDecode(content) as Map<String, dynamic>;
-      _applyStateFromMap(decoded);
-      await _saveData();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Backup restored successfully!')),
-        );
-      }
+Future<void> _importBackupFile() async {
+    final ctrl = TextEditingController();
+    final clip = await Clipboard.getData(Clipboard.kTextPlain);
+    if (clip?.text != null && clip!.text!.trim().startsWith('{')) {
+      ctrl.text = clip.text!;
     }
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Restore Backup JSON'),
+        content: TextField(
+          controller: ctrl,
+          maxLines: 6,
+          decoration: const InputDecoration(
+            labelText: 'Paste exported JSON backup here',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () async {
+              try {
+                final decoded = jsonDecode(ctrl.text.trim()) as Map<String, dynamic>;
+                _applyStateFromMap(decoded);
+                await _saveData();
+                if (mounted) {
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Backup restored successfully!')),
+                  );
+                }
+              } catch (e) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Invalid JSON format.')),
+                );
+              }
+            },
+            child: const Text('Restore'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
